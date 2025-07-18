@@ -12,8 +12,8 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Configuration - Update these URLs as needed
-GOOGLE_DRIVE_FILE_ID = "1s7T9_2Z68w8jUkHv-XeiRCqz88BXK-PF"
-GITHUB_STORE_URL = "https://raw.githubusercontent.com/tariqalghamdi64/Sales_Department_Forecasting-/main/store.csv"
+GOOGLE_DRIVE_FILE_ID = "1s7T9_2Z68w8jUkHv-XeiRCqz88BXK-PF"  # From your Google Drive link
+GITHUB_STORE_URL = "https://raw.githubusercontent.com/tariqalghamdi64/Sales_Department_Forecasting-/main/store.csv"  # Your GitHub repository
 
 # Page configuration
 st.set_page_config(
@@ -76,27 +76,32 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Cache data loading functions
-@st.cache_data
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_sales_data():
-    """Load and cache sales training data"""
+    """Load and cache sales training data from Google Drive"""
     try:
-        sales_data = pd.read_csv(r"C:\Users\tariq\OneDrive\Desktop\Summer_Projects\Sales_Department\train.csv")
+        # Google Drive file ID from the URL
+        url = f"https://drive.google.com/uc?id={GOOGLE_DRIVE_FILE_ID}&export=download"
+        
+        sales_data = pd.read_csv(url)
         return sales_data
     except Exception as e:
-        st.error(f"❌ Error loading sales data: {e}")
+        st.error(f"❌ Error loading sales data from Google Drive: {e}")
+        st.info("💡 Please ensure the Google Drive link is accessible and the file is publicly shared.")
         return None
 
-@st.cache_data
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_store_data():
-    """Load and cache store information data"""
+    """Load and cache store information data from GitHub"""
     try:
-        store_data = pd.read_csv(r"C:\Users\tariq\OneDrive\Desktop\Summer_Projects\Sales_Department\store.csv")
+        store_data = pd.read_csv(GITHUB_STORE_URL)
         return store_data
     except Exception as e:
-        st.error(f"❌ Error loading store data: {e}")
+        st.error(f"❌ Error loading store data from GitHub: {e}")
+        st.info("💡 Please update the GITHUB_STORE_URL in the configuration section with your actual repository URL.")
         return None
 
-@st.cache_data
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def preprocess_data(sales_data, store_data):
     """Preprocess and merge data with caching"""
     if sales_data is None or store_data is None:
@@ -133,7 +138,7 @@ def preprocess_data(sales_data, store_data):
     
     return sales_df, store_df, merged_df
 
-@st.cache_data
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def create_holidays_data(merged_df):
     """Create holidays data for Prophet forecasting"""
     if merged_df is None:
@@ -160,7 +165,7 @@ def create_holidays_data(merged_df):
     all_holidays = pd.concat([state_holidays_df, school_holidays_df])
     return all_holidays
 
-@st.cache_data
+@st.cache_data(ttl=1800)  # Cache for 30 minutes (forecasts change more frequently)
 def generate_forecast(store_id, merged_df, holidays_df, periods, include_holidays=True):
     """Generate sales forecast for a specific store"""
     if merged_df is None:
@@ -300,12 +305,44 @@ def main():
         ["🏠 Overview", "📈 Data Analysis", "🔮 Sales Forecasting", "📊 Store Analytics"]
     )
     
-    # Load data
-    with st.spinner("🔄 Loading data..."):
+    # Data status and cache management
+    st.sidebar.markdown("## 📊 Data Status")
+    
+    if 'data_loaded' in st.session_state and st.session_state.data_loaded:
+        st.sidebar.success("✅ Data loaded from cache")
+    else:
+        st.sidebar.info("🔄 Loading data...")
+    
+    # Debug: Clear cache button
+    if st.sidebar.button("🔄 Clear Cache"):
+        st.cache_data.clear()
+        if 'data_loaded' in st.session_state:
+            del st.session_state.data_loaded
+        st.success("✅ Cache cleared! Data will be reloaded on next refresh.")
+        st.rerun()
+    
+    # Load data with status indicators
+    if 'data_loaded' not in st.session_state:
+        st.session_state.data_loaded = False
+    
+    if not st.session_state.data_loaded:
+        with st.spinner("🔄 Loading data for the first time..."):
+            sales_data = load_sales_data()
+            store_data = load_store_data()
+            if sales_data is not None and store_data is not None:
+                st.success("✅ Data loaded successfully! Cached for future use.")
+                st.session_state.data_loaded = True
+            else:
+                st.error("❌ Failed to load data. Please check your data sources.")
+                return
+    else:
+        # Load cached data silently
         sales_data = load_sales_data()
         store_data = load_store_data()
-        sales_df, store_df, merged_df = preprocess_data(sales_data, store_data)
-        holidays_df = create_holidays_data(merged_df)
+    
+    # Preprocess data (this is also cached)
+    sales_df, store_df, merged_df = preprocess_data(sales_data, store_data)
+    holidays_df = create_holidays_data(merged_df)
     
     if merged_df is None:
         st.error("❌ Failed to load data. Please check your data files.")
@@ -313,7 +350,7 @@ def main():
     
     # Page routing
     if page == "🏠 Overview":
-        show_overview(merged_df, sales_df, store_df)
+        show_overview(merged_df, sales_df, store_df, sales_data, store_data)
     elif page == "📈 Data Analysis":
         show_data_analysis(merged_df)
     elif page == "🔮 Sales Forecasting":
@@ -321,7 +358,7 @@ def main():
     elif page == "📊 Store Analytics":
         show_store_analytics(merged_df)
 
-def show_overview(merged_df, sales_df, store_df):
+def show_overview(merged_df, sales_df, store_df, sales_data, store_data):
     """Overview page with key metrics and insights"""
     st.markdown('<h2 class="subtitle-text">🏠 Dashboard Overview</h2>', unsafe_allow_html=True)
     
@@ -410,22 +447,22 @@ def show_overview(merged_df, sales_df, store_df):
     
     with col1:
         # Original sales data missing values
-        original_sales = load_sales_data()
-        if original_sales is not None:
+        # Use the already loaded data instead of calling load_sales_data again
+        if sales_data is not None:
             fig, ax = plt.subplots(figsize=(10, 6))
-            sns.heatmap(original_sales.isnull(), cbar=False, cmap='viridis', ax=ax)
+            sns.heatmap(sales_data.isnull(), cbar=False, cmap='viridis', ax=ax)
             plt.title('Missing Data - Original Sales Data')
             st.pyplot(fig)
             plt.close()
             
             # Missing values summary
-            missing_sales = original_sales.isnull().sum()
+            missing_sales = sales_data.isnull().sum()
             if missing_sales.sum() > 0:
                 st.markdown("**Missing Values in Sales Data:**")
                 missing_df = pd.DataFrame({
                     'Column': missing_sales.index,
                     'Missing Count': missing_sales.values,
-                    'Missing Percentage': (missing_sales.values / len(original_sales) * 100).round(2)
+                    'Missing Percentage': (missing_sales.values / len(sales_data) * 100).round(2)
                 })
                 st.dataframe(missing_df[missing_df['Missing Count'] > 0], use_container_width=True)
             else:
@@ -433,22 +470,21 @@ def show_overview(merged_df, sales_df, store_df):
     
     with col2:
         # Original store data missing values
-        original_store = load_store_data()
-        if original_store is not None:
+        if store_data is not None:
             fig, ax = plt.subplots(figsize=(10, 6))
-            sns.heatmap(original_store.isnull(), cbar=False, cmap='viridis', ax=ax)
+            sns.heatmap(store_data.isnull(), cbar=False, cmap='viridis', ax=ax)
             plt.title('Missing Data - Original Store Data')
             st.pyplot(fig)
             plt.close()
             
             # Missing values summary
-            missing_store = original_store.isnull().sum()
+            missing_store = store_data.isnull().sum()
             if missing_store.sum() > 0:
                 st.markdown("**Missing Values in Store Data:**")
                 missing_df = pd.DataFrame({
                     'Column': missing_store.index,
                     'Missing Count': missing_store.values,
-                    'Missing Percentage': (missing_store.values / len(original_store) * 100).round(2)
+                    'Missing Percentage': (missing_store.values / len(store_data) * 100).round(2)
                 })
                 st.dataframe(missing_df[missing_df['Missing Count'] > 0], use_container_width=True)
             else:
