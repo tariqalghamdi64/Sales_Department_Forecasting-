@@ -11,6 +11,10 @@ from plotly.subplots import make_subplots
 import warnings
 warnings.filterwarnings('ignore')
 
+# Configuration - Update these URLs as needed
+GOOGLE_DRIVE_FILE_ID = "1s7T9_2Z68w8jUkHv-XeiRCqz88BXK-PF"
+GITHUB_STORE_URL = "https://raw.githubusercontent.com/tariqalghamdi64/Sales_Department_Forecasting-/main/store.csv"
+
 # Page configuration
 st.set_page_config(
     page_title="📊 Sales Department Analytics",
